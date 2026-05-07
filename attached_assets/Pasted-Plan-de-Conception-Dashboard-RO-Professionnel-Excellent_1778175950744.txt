@@ -1,0 +1,194 @@
+Plan de Conception — Dashboard RO Professionnel
+Excellente démarche de commencer par la stratégie avant le code. Voici mon analyse complète en tant que Product Manager / UX Designer, avec un cadrage polyvalent (pas figé sur les 6 exercices actuels) pour que ton dashboard puisse accueillir n'importe quel problème de Recherche Opérationnelle.
+
+1. Analyse de l'existant — Limites → Forces
+Limite Streamlit actuelleConséquenceTransformation ReactRe-run complet à chaque interactionLatence perçue, perte d'état, UX cassanteState management granulaire (Zustand/Context) → seuls les composants concernés re-rendentLayout vertical imposé (colonnes basiques uniquement)Difficile de créer des dashboards denses style Bloomberg/LinearGrille CSS libre + composants resizables (react-grid-layout)Solveur côté serveur Python uniquementDépendance backend, déploiement lourd, coût d'hébergementSolveur côté client via glpk.js ou javascript-lp-solver (WebAssembly) → zéro backend, déploiement statique gratuitCSS injecté en <style> dans des st.markdownDifficile à maintenir, conflits, pas de design systemTailwind + shadcn/ui → tokens cohérents, composants accessibles, dark/light mode natifCode spécifique aux 6 exercicesAjouter un nouveau TP = nouveau fichier .py + nouvelles routesMoteur générique : un PL est défini par un JSON (variables, contraintes, objectif) → l'UI est la même pour tousPlotly lourd (~3 MB bundle)Chargement lentRecharts ou Visx → plus léger, mieux intégré ReactPas de partage d'état (URL non shareable)Impossible d'envoyer un lien vers un résultat précisReact Router + state dans l'URL → liens partageablesSidebar Streamlit limitéeNavigation pauvreSidebar custom avec recherche, favoris, historique des résolutions
+Le pivot clé : passer d'une app spécifique aux TPs à une plateforme générique de résolution PL dans laquelle les TPs ne sont que des cas pré-chargés.
+
+2. Architecture de l'information
+Sections principales (navigation)
+a. Dashboard (vue d'ensemble) — Page d'accueil après auth/load
+
+KPIs globaux : nombre de modèles résolus, statut moyen, dernière exécution
+Liste des modèles récents (cards cliquables)
+Raccourcis vers les TPs pré-chargés
+Graphique d'activité (timeline des résolutions)
+
+b. Bibliothèque de modèles — Catalogue
+
+TPs pré-chargés (les 6 actuels) + modèles utilisateur
+Filtres : type (max/min), taille (nb variables), tags (transport, production…)
+Action : "Charger" / "Dupliquer" / "Comparer"
+
+c. Éditeur de modèle — Cœur de l'app
+
+Mode formulaire : inputs structurés (variables, contraintes, objectif)
+Mode texte : syntaxe LP-like (équivalent format Lindo) avec coloration
+Mode JSON : pour utilisateurs avancés
+Validation en temps réel + preview de la formulation LaTeX
+
+d. Résultats & Analyse — Sortie unifiée
+
+Bandeau KPI : statut, valeur objectif, temps de résolution
+Onglets : Solution / Sensibilité / Contraintes / Visualisations
+Visualisations adaptatives selon le modèle (2 vars → région réalisable, transport → Sankey + heatmap, etc.)
+
+e. Comparateur — Différentiateur fort vs Streamlit
+
+Lancer plusieurs scénarios (what-if) côte à côte
+Tableau comparatif des objectifs et utilisations de ressources
+
+f. Paramètres — Préférences user
+
+Thème (clair/sombre/système)
+Solveur préféré, précision, langue (FR/EN/AR)
+Export par défaut (CSV, JSON, PDF)
+
+KPI prioritaires (au-dessus du fold)
+
+Statut de résolution (badge) — Optimal / Infaisable / Non borné
+Valeur de l'objectif (Z*) — chiffre principal
+Temps de résolution (ms) — perf indicator
+Nombre de contraintes saturées / total — tension du modèle
+Marge moyenne (slack moyen normalisé) — robustesse
+Variables actives — nb de variables non-nulles
+
+
+3. Charte graphique
+Je recommande Minimalisme type Vercel/Linear plutôt que Neobrutalisme. Justification : un dashboard analytique académique doit privilégier la lisibilité des données sur la personnalité visuelle. Le neobrutalisme (bordures épaisses, ombres dures) fatigue l'œil sur des sessions longues et concurrence visuellement les graphiques.
+Palette
+Mode sombre (par défaut, cohérent avec ton existant)
+
+Fond : #09090B (zinc-950) — plus neutre que ton #0D1117 actuel, moins bleuté
+Surface : #18181B (zinc-900)
+Surface élevée : #27272A (zinc-800)
+Bordure : #27272A / #3F3F46
+Texte primaire : #FAFAFA
+Texte secondaire : #A1A1AA
+
+Mode clair
+
+Fond : #FFFFFF
+Surface : #FAFAFA
+Bordure : #E4E4E7
+Texte : #09090B / #71717A
+
+Accents sémantiques (identiques dans les deux modes, ajustés en saturation)
+
+Primaire : #3B82F6 (blue-500) — actions, liens
+Succès : #10B981 (emerald-500) — Optimal, contraintes OK
+Warning : #F59E0B (amber-500) — saturation forte
+Erreur : #EF4444 (red-500) — Infaisable
+Neutre data : palette catégorielle 8 couleurs (Tailwind)
+
+Style de composants
+Système : shadcn/ui + Tailwind
+
+Bordures fines (1px), rayons modérés (6-8px)
+Ombres subtiles (shadow-sm)
+Typographie : Inter pour l'UI, JetBrains Mono pour code/chiffres (cohérent avec ton choix actuel)
+Animations courtes (150-200ms), Framer Motion pour transitions de page
+
+Pourquoi ce choix vs alternatives :
+
+Material UI : trop opinioné, "google-esque", lourd
+Chakra/Mantine : bons mais moins flexibles que shadcn (qui copie le code dans ton projet → contrôle total)
+Neobrutalisme : tendance, mais inadapté à un dashboard data-dense
+
+
+4. Stack de déploiement
+Stack technique recommandé
+CoucheChoixJustificationFrameworkVite + React + TypeScriptBuild ultra-rapide, HMR instantané, TS pour fiabilitéRoutingReact Router v6Standard, URL-based stateStylingTailwind CSS + shadcn/uiTokens cohérents, copy-paste componentsStateZustandPlus simple que Redux, suffisant iciChartsRecharts (principal) + D3 (Sankey, custom)Recharts pour 80% des cas, D3 pour le resteSolveurglpk.js (WebAssembly)GLPK compilé en WASM = solveur PL professionnel dans le navigateur, pas de backendFormsReact Hook Form + ZodValidation robuste de modèles LPLaTeXKaTeXRendu rapide des formulations mathématiques
+Procédure de déploiement (gratuit)
+Étape 1 — Repository GitHub
+1. Créer repo public "ro-dashboard" sur github.com
+2. git init, commit, push
+3. Ajouter README, LICENSE (MIT), .gitignore (Node)
+Étape 2 — Vercel (recommandé)
+1. vercel.com → Sign in with GitHub
+2. Import Project → sélectionner ro-dashboard
+3. Framework preset: Vite (auto-détecté)
+4. Build command: npm run build
+5. Output directory: dist
+6. Deploy → URL automatique : ro-dashboard.vercel.app
+Avantages Vercel vs Netlify pour ce projet :
+
+Preview deployments par PR (chaque branche = URL de test → utile pour montrer au prof avant de merger)
+Edge network mondial gratuit
+Analytics intégrés (gratuit tier)
+Build cache plus rapide
+
+Étape 3 — Domaine custom (optionnel)
+
+Vercel offre *.vercel.app gratuit
+Domaine .tn ou .com ~10€/an si tu veux du sérieux
+
+Étape 4 — CI/CD automatique
+
+Chaque git push sur main → redéploiement automatique
+Pas de configuration nécessaire (Vercel détecte tout)
+
+Étape 5 — Performance & SEO
+
+Lighthouse score visé : >95 (faisable avec Vite + WASM lazy-loaded)
+Meta tags OpenGraph pour partage social
+robots.txt + sitemap.xml
+
+
+5. Phasage du projet (4 étapes)
+Phase 1 — Fondations (Semaine 1)
+Objectif : un squelette navigable et déployé
+
+Setup Vite + TS + Tailwind + shadcn
+React Router + layout principal (sidebar + topbar + content)
+Theme provider (dark/light)
+Page d'accueil statique avec KPIs mockés
+Premier déploiement Vercel
+Livrable : URL Vercel avec navigation entre pages vides mais stylées
+
+Phase 2 — Moteur de résolution générique (Semaine 2)
+Objectif : résoudre n'importe quel PL côté client
+
+Intégration glpk.js
+Définition du schéma JSON d'un modèle LP (Zod schema)
+Fonction solve(model) → result typée
+Charger les 6 TPs comme fichiers JSON dans /public/models/
+Page "Bibliothèque" qui liste et charge ces modèles
+Livrable : on peut résoudre les 6 TPs existants sans aucun code spécifique
+
+Phase 3 — UI riche (Semaine 3)
+Objectif : visualisations et éditeur
+
+Éditeur de modèle (mode formulaire + JSON)
+Page Résultats avec onglets (Solution / Contraintes / Visu)
+Composants de visualisation génériques :
+
+Région réalisable (auto-détectée si 2 variables)
+Bar chart variables (n'importe quel nb de vars)
+Heatmap + Sankey (auto-détectés si problème de transport)
+Radar utilisation contraintes
+
+
+Export CSV/JSON
+Livrable : parité fonctionnelle complète avec ton Streamlit + meilleure UX
+
+Phase 4 — Différenciateurs & polish (Semaine 4)
+Objectif : dépasser le prototype
+
+Comparateur de scénarios (what-if analysis)
+Analyse de sensibilité (coûts réduits, prix duaux)
+Mode présentation (fullscreen pour soutenance)
+Animations Framer Motion
+Tests unitaires sur le solveur
+Documentation utilisateur (page /docs)
+Optimisations bundle (code splitting, lazy load WASM)
+Livrable : produit de niveau portfolio professionnel
+
+
+Ce qui rend ce plan "polyvalent et passe-partout"
+
+Schéma JSON unifié pour tout PL → ajouter un TP = ajouter un fichier JSON, jamais du code
+Visualisations auto-détectées selon la structure du modèle (2 vars → région, transport → Sankey)
+Solveur WebAssembly → fonctionne pour PL continu, entier, mixte sans changer d'archi
+Pas de backend → coût zéro, déploiement instantané
+Design system (shadcn) → réutilisable pour tes futurs projets
