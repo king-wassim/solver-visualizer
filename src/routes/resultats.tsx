@@ -83,6 +83,15 @@ function exportCSV(result: SolveResult, modelName: string) {
   a.click();
 }
 
+function exportJSON(model: LPModel, result: SolveResult) {
+  const payload = { model, result, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${model.name.replace(/\s+/g, "_")}_solution.json`;
+  a.click();
+}
+
 async function exportPDF(
   model: LPModel,
   result: SolveResult,
@@ -329,7 +338,10 @@ function ResultatsPage() {
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => exportCSV(solveResult, selectedModel.name)} className="gap-1.5">
-            <Download className="h-3.5 w-3.5" /> Export CSV
+            <Download className="h-3.5 w-3.5" /> CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => exportJSON(selectedModel, solveResult)} className="gap-1.5">
+            <Download className="h-3.5 w-3.5" /> JSON
           </Button>
           <Button
             size="sm"

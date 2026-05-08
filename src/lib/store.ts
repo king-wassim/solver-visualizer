@@ -41,7 +41,11 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "ro-studio",
-      partialize: (state) => ({ theme: state.theme }),
+      partialize: (state) => ({
+        theme: state.theme,
+        selectedModel: state.selectedModel,
+        solveResult: state.solveResult,
+      }),
     },
   ),
 );

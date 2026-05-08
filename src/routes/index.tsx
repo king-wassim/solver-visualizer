@@ -1,28 +1,17 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import {
-  Activity,
-  Target,
-  TrendingUp,
+  BookOpen,
   ArrowRight,
+  TrendingUp,
+  TrendingDown,
+  Layers,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from "recharts";
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SAMPLE_MODELS } from "@/lib/sample-models";
-import { solveLP } from "@/lib/solver";
-import type { SolveResult } from "@/lib/lp-schema";
+import { useAppStore } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,27 +23,20 @@ export const Route = createFileRoute("/")({
   component: DashboardPage,
 });
 
-const ACTIVITY = [
-  { jour: "Lun", resolutions: 4 },
-  { jour: "Mar", resolutions: 7 },
-  { jour: "Mer", resolutions: 5 },
-  { jour: "Jeu", resolutions: 12 },
-  { jour: "Ven", resolutions: 9 },
-  { jour: "Sam", resolutions: 3 },
-  { jour: "Dim", resolutions: 6 },
-];
+const maxCount = SAMPLE_MODELS.filter((m) => m.sense === "max").length;
+const minCount = SAMPLE_MODELS.filter((m) => m.sense === "min").length;
 
 function DashboardPage() {
-  const [demo, setDemo] = useState<SolveResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const { setSelectedModel, setSolveResult } = useAppStore();
 
-  useEffect(() => {
-    let mounted = true;
-    solveLP(SAMPLE_MODELS[0]).then((r) => {
-      if (mounted) { setDemo(r); setLoading(false); }
-    });
-    return () => { mounted = false; };
-  }, []);
+  function openModel(id: string) {
+    const m = SAMPLE_MODELS.find((x) => x.id === id);
+    if (!m) return;
+    setSelectedModel(m);
+    setSolveResult(null);
+    navigate({ to: "/editeur" });
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 p-6">
@@ -79,73 +61,36 @@ function DashboardPage() {
       </div>
 
       {/* KPI grid */}
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard
-          icon={<Target className="h-4 w-4" />}
-          label="Valeur Z*"
-          value={loading ? "…" : demo?.objective.toFixed(2) ?? "—"}
-          hint="Objectif optimal"
-          mono
+          icon={<Layers className="h-4 w-4" />}
+          label="Modèles disponibles"
+          value={String(SAMPLE_MODELS.length)}
+          hint="TPs pré-chargés"
+        />
+        <KpiCard
+          icon={<TrendingUp className="h-4 w-4" />}
+          label="Maximisation"
+          value={String(maxCount)}
+          hint="Problèmes de type max"
+        />
+        <KpiCard
+          icon={<TrendingDown className="h-4 w-4" />}
+          label="Minimisation"
+          value={String(minCount)}
+          hint="Problèmes de type min"
         />
       </div>
 
-      {/* Main grid */}
-      <div className="grid grid-cols-1 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between space-y-0">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Activity className="h-4 w-4 text-primary" />
-                Activité de résolution
-              </CardTitle>
-              <CardDescription>Dernière semaine — exécutions par jour</CardDescription>
-            </div>
-            <Badge variant="outline" className="gap-1 text-xs">
-              <TrendingUp className="h-3 w-3" /> +18%
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[260px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={ACTIVITY} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="jour" stroke="var(--color-muted-foreground)" fontSize={12} />
-                  <YAxis stroke="var(--color-muted-foreground)" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--color-popover)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="resolutions"
-                    stroke="var(--color-chart-1)"
-                    strokeWidth={2}
-                    fill="url(#g1)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-      </div>
-
-      {/* Modèles récents */}
+      {/* Modèles disponibles */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-base">Modèles disponibles</CardTitle>
-            <CardDescription>TPs pré-chargés — cliquez pour ouvrir</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="h-4 w-4 text-primary" />
+              Modèles disponibles
+            </CardTitle>
+            <CardDescription>TPs pré-chargés — cliquez pour ouvrir dans l'éditeur</CardDescription>
           </div>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/bibliotheque">
@@ -156,14 +101,21 @@ function DashboardPage() {
         <CardContent>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {SAMPLE_MODELS.map((m) => (
-              <Link
+              <button
                 key={m.id}
-                to="/editeur"
-                className="group rounded-lg border border-border bg-card p-4 transition-colors hover:bg-surface-elevated hover:border-primary/40"
+                onClick={() => openModel(m.id)}
+                className="group rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent hover:border-primary/40"
               >
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-medium">{m.name}</span>
-                  <Badge variant="outline" className="text-[10px] uppercase">
+                  <Badge
+                    variant="outline"
+                    className={
+                      m.sense === "max"
+                        ? "text-[10px] uppercase bg-primary/10 text-primary border-primary/30"
+                        : "text-[10px] uppercase bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
+                    }
+                  >
                     {m.sense}
                   </Badge>
                 </div>
@@ -178,7 +130,7 @@ function DashboardPage() {
                     </span>
                   ))}
                 </div>
-              </Link>
+              </button>
             ))}
           </div>
         </CardContent>
@@ -192,13 +144,11 @@ function KpiCard({
   label,
   value,
   hint,
-  mono,
 }: {
   icon: React.ReactNode;
   label: string;
-  value: React.ReactNode;
+  value: string;
   hint?: string;
-  mono?: boolean;
 }) {
   return (
     <Card>
@@ -207,10 +157,9 @@ function KpiCard({
           <span className="text-primary">{icon}</span>
           {label}
         </div>
-        <div className={`mt-2 text-2xl font-semibold ${mono ? "num" : ""}`}>{value}</div>
+        <div className="mt-2 text-2xl font-semibold tabular-nums">{value}</div>
         {hint && <div className="mt-0.5 text-[11px] text-muted-foreground">{hint}</div>}
       </CardContent>
     </Card>
   );
 }
-

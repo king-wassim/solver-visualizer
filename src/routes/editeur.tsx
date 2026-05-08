@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PencilRuler, Play, Code2, FormInput, Plus, Trash2, AlertCircle, CheckCircle2, BookOpen } from "lucide-react";
+import { InlineMath } from "react-katex";
+import "katex/dist/katex.min.css";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,19 +38,26 @@ const DEFAULT_MODEL: LPModel = {
   ],
 };
 
+function varToLatex(name: string): string {
+  return name.replace(/^([a-zA-Z]+)(\d+)$/, "$1_{$2}");
+}
+
 function buildLatex(model: LPModel): string {
-  const obj = model.variables
+  const terms = model.variables
     .map((v) => {
       const c = model.objective.coefficients[v.name] ?? 0;
       if (c === 0) return null;
-      return `${c > 0 ? "+" : ""}${c}\\,${v.name}`;
+      const vname = varToLatex(v.name);
+      if (c === 1) return `+${vname}`;
+      if (c === -1) return `-${vname}`;
+      return `${c > 0 ? "+" : ""}${c}\\,${vname}`;
     })
     .filter(Boolean)
     .join(" ")
     .replace(/^\+/, "");
 
   const sense = model.sense === "max" ? "\\max" : "\\min";
-  return `${sense}\\; Z = ${obj || "0"}`;
+  return `${sense}\\; Z = ${terms || "0"}`;
 }
 
 function EditeurPage() {
@@ -81,7 +90,7 @@ function EditeurPage() {
         setModel(result.data);
         setJsonError(null);
       } else {
-        setJsonError(result.error.errors[0]?.message ?? "JSON invalide");
+        setJsonError(result.error.issues[0]?.message ?? "JSON invalide");
       }
     } catch {
       setJsonError("Syntaxe JSON invalide");
@@ -186,9 +195,12 @@ function EditeurPage() {
         </div>
       </div>
 
+      {/* Aperçu LaTeX avec KaTeX */}
       <Card className="bg-muted/30">
         <CardContent className="py-3 px-4">
-          <p className="font-mono text-sm text-primary">{latex}</p>
+          <div className="text-base text-primary overflow-x-auto">
+            <InlineMath math={latex} />
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">Aperçu de la fonction objectif</p>
         </CardContent>
       </Card>
@@ -240,6 +252,7 @@ function EditeurPage() {
                     <th className="pb-2 text-left font-medium text-muted-foreground text-xs">Nom</th>
                     <th className="pb-2 text-left font-medium text-muted-foreground text-xs px-2">Type</th>
                     <th className="pb-2 text-left font-medium text-muted-foreground text-xs px-2">Borne inf.</th>
+                    <th className="pb-2 text-left font-medium text-muted-foreground text-xs px-2">Borne sup.</th>
                     <th className="pb-2 text-left font-medium text-muted-foreground text-xs px-2">Coef. obj.</th>
                     <th className="pb-2 text-left font-medium text-muted-foreground text-xs px-2">Description</th>
                     <th className="pb-2"></th>
@@ -262,7 +275,22 @@ function EditeurPage() {
                         </Select>
                       </td>
                       <td className="py-1.5 px-2">
-                        <Input className="h-7 w-16 text-xs" type="number" value={v.lb ?? 0} onChange={(e) => setVarField(i, "lb", parseFloat(e.target.value) || 0)} />
+                        <Input
+                          className="h-7 w-16 text-xs"
+                          type="number"
+                          placeholder="0"
+                          value={v.lb ?? ""}
+                          onChange={(e) => setVarField(i, "lb", e.target.value === "" ? null : parseFloat(e.target.value))}
+                        />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <Input
+                          className="h-7 w-16 text-xs"
+                          type="number"
+                          placeholder="∞"
+                          value={v.ub ?? ""}
+                          onChange={(e) => setVarField(i, "ub", e.target.value === "" ? null : parseFloat(e.target.value))}
+                        />
                       </td>
                       <td className="py-1.5 px-2">
                         <Input className="h-7 w-16 text-xs font-mono" type="number" value={model.objective.coefficients[v.name] ?? 0}
