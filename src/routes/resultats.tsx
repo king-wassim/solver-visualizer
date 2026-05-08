@@ -102,118 +102,283 @@ async function exportPDF(
     import("html-to-image"),
   ]);
 
-  const { summary, source } = await generateSummary({
-    data: { model, result },
-  });
+  const { summary, source } = await generateSummary({ data: { model, result } });
 
   const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 40;
-  let y = margin;
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 45;
+  const CW = W - M * 2;
+  let y = M;
+  let page = 1;
 
-  const ensureSpace = (h: number) => {
-    if (y + h > pageHeight - margin) {
-      doc.addPage();
-      y = margin;
-    }
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const topBar = () => {
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 0, W, 5, "F");
+    doc.setFillColor(59, 130, 246);
+    doc.rect(0, 5, W, 3, "F");
   };
 
+  const footer = () => {
+    doc.setFillColor(248, 249, 250);
+    doc.rect(0, H - 26, W, 26, "F");
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.line(0, H - 26, W, H - 26);
+    doc.setLineWidth(0.2);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(130, 130, 130);
+    doc.text("RO Studio · Rapport de résolution", M, H - 10);
+    doc.text(`Page ${page}`, W - M, H - 10, { align: "right" });
+    doc.setTextColor(0, 0, 0);
+  };
+
+  const newPage = () => {
+    footer();
+    doc.addPage();
+    page++;
+    topBar();
+    y = M + 10;
+  };
+
+  const ensureSpace = (h: number) => {
+    if (y + h > H - 36) newPage();
+  };
+
+  const sectionHeader = (num: string, title: string) => {
+    ensureSpace(32);
+    doc.setFillColor(239, 246, 255);
+    doc.rect(M - 10, y - 13, CW + 20, 22, "F");
+    doc.setFillColor(37, 99, 235);
+    doc.rect(M - 10, y - 13, 4, 22, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(30, 64, 175);
+    doc.text(`${num}  ${title}`, M + 2, y);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    y += 18;
+  };
+
+  const tableHead = (cols: string[], widths: number[]) => {
+    doc.setFillColor(30, 41, 59);
+    doc.rect(M, y - 12, CW, 18, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    let x = M + 5;
+    cols.forEach((col, i) => {
+      doc.text(col, x, y);
+      x += widths[i];
+    });
+    doc.setTextColor(0, 0, 0);
+    y += 9;
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.2);
+    doc.line(M, y, M + CW, y);
+    y += 7;
+  };
+
+  // ── PAGE 1 ─────────────────────────────────────────────────────────────────
+  topBar();
+  y = 28;
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("Rapport de résolution", margin, y);
-  y += 22;
+  doc.setFontSize(24);
+  doc.setTextColor(15, 23, 42);
+  doc.text("Rapport de résolution", M, y);
+  y += 20;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(37, 99, 235);
+  doc.text(model.name, M, y);
+  y += 13;
+
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.text(model.name, margin, y);
-  y += 14;
   doc.setFontSize(9);
-  doc.setTextColor(120);
-  doc.text(`Généré le ${new Date().toLocaleString("fr-FR")}`, margin, y);
-  y += 18;
-  doc.setTextColor(0);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Généré le ${new Date().toLocaleString("fr-FR")}  ·  RO Studio`, M, y);
+  y += 6;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Synthèse", margin, y);
-  y += 16;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(1);
+  doc.line(M, y, W - M, y);
+  doc.setLineWidth(0.2);
+  doc.setDrawColor(0, 0, 0);
+  y += 20;
 
-  const kpis: [string, string][] = [
-    ["Statut", result.status],
-    ["Z*", isNaN(result.objective) ? "—" : result.objective.toLocaleString("fr-FR", { maximumFractionDigits: 4 })],
-    ["Variables", String(result.variables.length)],
-    ["Contraintes", String(result.constraints.length)],
-    ["Saturées", String(result.constraints.filter((c) => c.saturated).length)],
-  ];
-  kpis.forEach(([k, v]) => {
-    doc.setTextColor(120);
-    doc.text(`${k} :`, margin, y);
-    doc.setTextColor(0);
-    doc.text(v, margin + 90, y);
-    y += 13;
-  });
-  y += 10;
-
-  // Solution table
-  ensureSpace(40);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Solution optimale", margin, y);
-  y += 16;
-  doc.setFontSize(10);
-  doc.text("Variable", margin, y);
-  doc.text("Valeur", margin + 200, y);
-  doc.text("Coef. obj.", margin + 300, y);
-  doc.text("Contribution", margin + 400, y);
+  // ── SECTION 1 : Synthèse ──────────────────────────────────────────────────
+  sectionHeader("1.", "Synthèse");
   y += 4;
-  doc.setDrawColor(200);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 10;
-  doc.setFont("helvetica", "normal");
-  for (const v of result.variables) {
-    ensureSpace(14);
+
+  type KpiEntry = { label: string; value: string; highlight: boolean };
+  const kpiData: KpiEntry[] = [
+    { label: "Statut de résolution", value: result.status.toUpperCase(), highlight: result.status === "optimal" },
+    { label: "Valeur optimale Z*", value: isNaN(result.objective) ? "—" : result.objective.toLocaleString("fr-FR", { maximumFractionDigits: 4 }), highlight: true },
+    { label: "Variables de décision", value: String(result.variables.length), highlight: false },
+    { label: "Contraintes", value: String(result.constraints.length), highlight: false },
+    { label: "Contraintes saturées", value: String(result.constraints.filter((c) => c.saturated).length), highlight: false },
+    { label: "Durée de résolution", value: `${result.durationMs.toFixed(0)} ms`, highlight: false },
+  ];
+
+  const KCOLS = 3;
+  const kW = CW / KCOLS;
+  const kH = 38;
+  const kGap = 4;
+
+  kpiData.forEach(({ label, value, highlight }, i) => {
+    const col = i % KCOLS;
+    const row = Math.floor(i / KCOLS);
+    const kx = M + col * kW;
+    const ky = y + row * (kH + kGap);
+
+    if (highlight && i === 0 && result.status === "optimal") {
+      doc.setFillColor(209, 250, 229);
+    } else if (highlight && i === 1) {
+      doc.setFillColor(219, 234, 254);
+    } else {
+      doc.setFillColor(244, 246, 248);
+    }
+    doc.rect(kx + 2, ky - 14, kW - 6, kH, "F");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(label, kx + 8, ky - 1);
+
+    doc.setFont("helvetica", "bold");
+    if (highlight && i === 0 && result.status === "optimal") {
+      doc.setFontSize(13);
+      doc.setTextColor(6, 95, 70);
+    } else if (highlight && i === 1) {
+      doc.setFontSize(14);
+      doc.setTextColor(37, 99, 235);
+    } else {
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+    }
+    doc.text(value, kx + 8, ky + 15);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+  });
+
+  y += Math.ceil(kpiData.length / KCOLS) * (kH + kGap) + 16;
+
+  // ── SECTION 2 : Solution optimale ────────────────────────────────────────
+  sectionHeader("2.", "Solution optimale");
+
+  const vCols = ["Variable", "Description", "Valeur optimale", "Coef. obj.", "Contribution"];
+  const vWidths = [65, 155, 90, 75, 0];
+  tableHead(vCols, vWidths);
+  doc.setFontSize(9.5);
+
+  for (const [idx, v] of result.variables.entries()) {
+    ensureSpace(16);
     const coef = model.objective.coefficients[v.name] ?? 0;
     const contrib = coef * v.value;
-    doc.text(v.name, margin, y);
-    doc.text(v.value.toLocaleString("fr-FR", { maximumFractionDigits: 4 }), margin + 200, y);
-    doc.text(String(coef), margin + 300, y);
-    doc.text(contrib.toLocaleString("fr-FR", { maximumFractionDigits: 4 }), margin + 400, y);
-    y += 13;
-  }
-  y += 10;
+    const desc = model.variables.find((mv) => mv.name === v.name)?.description ?? "—";
+    const isActive = Math.abs(v.value) > 1e-9;
 
-  // Constraints table
-  ensureSpace(40);
+    if (idx % 2 === 0) {
+      doc.setFillColor(249, 250, 251);
+      doc.rect(M, y - 10, CW, 15, "F");
+    }
+    doc.setTextColor(isActive ? 0 : 160, isActive ? 0 : 160, isActive ? 0 : 160);
+    doc.setFont("helvetica", isActive ? "bold" : "normal");
+    doc.text(v.name, M + 5, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(doc.splitTextToSize(desc, vWidths[1] - 6)[0] as string, M + 5 + vWidths[0], y);
+    doc.text(v.value.toLocaleString("fr-FR", { maximumFractionDigits: 4 }), M + 5 + vWidths[0] + vWidths[1], y);
+    doc.text(String(coef), M + 5 + vWidths[0] + vWidths[1] + vWidths[2], y);
+    doc.text(contrib.toLocaleString("fr-FR", { maximumFractionDigits: 4 }), M + 5 + vWidths[0] + vWidths[1] + vWidths[2] + vWidths[3], y);
+    doc.setTextColor(0, 0, 0);
+    y += 14;
+  }
+
+  ensureSpace(20);
+  doc.setFillColor(219, 234, 254);
+  doc.rect(M, y - 10, CW, 18, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Analyse des contraintes", margin, y);
-  y += 16;
-  doc.setFontSize(9);
-  doc.text("Contrainte", margin, y);
-  doc.text("LHS", margin + 180, y);
-  doc.text("Op.", margin + 240, y);
-  doc.text("RHS", margin + 280, y);
-  doc.text("Slack", margin + 340, y);
-  doc.text("Statut", margin + 410, y);
-  y += 4;
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 10;
-  doc.setFont("helvetica", "normal");
-  for (const c of result.constraints) {
-    ensureSpace(14);
-    doc.text(String(c.name).slice(0, 28), margin, y);
-    doc.text(c.lhs.toFixed(2), margin + 180, y);
-    doc.text(c.operator, margin + 240, y);
-    doc.text(String(c.rhs), margin + 280, y);
-    doc.text(c.slack.toFixed(2), margin + 340, y);
-    doc.text(c.saturated ? "Saturée" : "Relâchée", margin + 410, y);
-    y += 13;
-  }
-  y += 10;
+  doc.setFontSize(10);
+  doc.setTextColor(30, 64, 175);
+  doc.text("Valeur objective totale  Z*", M + 5, y);
+  const zStr = isNaN(result.objective) ? "—" : result.objective.toLocaleString("fr-FR", { maximumFractionDigits: 4 });
+  doc.text(zStr, M + CW - 5, y, { align: "right" });
+  doc.setTextColor(0, 0, 0);
+  y += 22;
 
-  // Charts
+  // ── SECTION 3 : Analyse des contraintes ─────────────────────────────────
+  sectionHeader("3.", "Analyse des contraintes");
+
+  const hasDual = result.constraints.some((c) => c.dual != null);
+  const cCols = hasDual
+    ? ["Contrainte", "LHS", "Op.", "RHS", "Slack", "Utilisation", "Statut", "Prix dual"]
+    : ["Contrainte", "LHS", "Op.", "RHS", "Slack", "Utilisation", "Statut"];
+  const cWidths = hasDual
+    ? [120, 52, 22, 52, 52, 62, 60, 0]
+    : [145, 58, 22, 58, 58, 68, 0];
+  tableHead(cCols, cWidths);
+  doc.setFontSize(9);
+
+  for (const [idx, c] of result.constraints.entries()) {
+    ensureSpace(16);
+    const util = c.rhs !== 0 ? `${((c.lhs / c.rhs) * 100).toFixed(1)}%` : "N/A";
+
+    if (c.saturated) {
+      doc.setFillColor(254, 243, 199);
+      doc.rect(M, y - 10, CW, 15, "F");
+    } else if (idx % 2 === 0) {
+      doc.setFillColor(249, 250, 251);
+      doc.rect(M, y - 10, CW, 15, "F");
+    }
+
+    let x = M + 5;
+    doc.setFont("helvetica", c.saturated ? "bold" : "normal");
+    doc.text(String(c.name ?? `C${idx + 1}`).slice(0, 20), x, y);
+    x += cWidths[0];
+    doc.setFont("helvetica", "normal");
+    doc.text(c.lhs.toFixed(2), x, y); x += cWidths[1];
+    doc.text(c.operator, x, y); x += cWidths[2];
+    doc.text(String(c.rhs), x, y); x += cWidths[3];
+    doc.text(c.slack.toFixed(2), x, y); x += cWidths[4];
+
+    if (util !== "N/A") {
+      const pct = parseFloat(util);
+      if (pct >= 99) doc.setTextColor(146, 64, 14);
+      else if (pct >= 80) doc.setTextColor(161, 98, 7);
+      else doc.setTextColor(21, 128, 61);
+      doc.text(util, x, y);
+      doc.setTextColor(0, 0, 0);
+    } else {
+      doc.text(util, x, y);
+    }
+    x += cWidths[5];
+
+    if (c.saturated) {
+      doc.setTextColor(146, 64, 14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Saturée", x, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0);
+    } else {
+      doc.setTextColor(107, 114, 128);
+      doc.text("Relâchée", x, y);
+      doc.setTextColor(0, 0, 0);
+    }
+    x += cWidths[6];
+
+    if (hasDual) {
+      doc.text(c.dual?.toFixed(4) ?? "—", x, y);
+    }
+    y += 14;
+  }
+  y += 8;
+
+  // ── VISUALISATIONS ────────────────────────────────────────────────────────
   if (chartsEl) {
     try {
       const imgData = await htmlToImage.toPng(chartsEl, {
@@ -227,53 +392,106 @@ async function exportPDF(
         if (probe.complete && probe.naturalWidth) resolve();
         else probe.onload = () => resolve();
       });
-      const imgW = pageWidth - margin * 2;
+
+      newPage();
+      sectionHeader("4.", "Visualisations");
+
+      const imgW = CW;
       const imgH = (probe.naturalHeight * imgW) / probe.naturalWidth;
-
-      doc.addPage();
-      y = margin;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Visualisations", margin, y);
-      y += 16;
-
-      const usableH = pageHeight - margin - y;
+      const usableH = H - 36 - y;
       if (imgH <= usableH) {
-        doc.addImage(imgData, "PNG", margin, y, imgW, imgH);
+        doc.addImage(imgData, "PNG", M, y, imgW, imgH);
+        y += imgH + 10;
       } else {
         const scale = usableH / imgH;
-        doc.addImage(imgData, "PNG", margin, y, imgW * scale, usableH);
+        doc.addImage(imgData, "PNG", M, y, imgW * scale, usableH);
+        y += usableH + 10;
       }
     } catch (e) {
       console.warn("Capture des graphiques échouée :", e);
     }
   }
 
-  // LLM summary
-  doc.addPage();
-  y = margin;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Compte-rendu", margin, y);
-  y += 16;
+  // ── COMPTE-RENDU ANALYTIQUE ───────────────────────────────────────────────
+  newPage();
+
+  const crNum = chartsEl ? "5." : "4.";
+  sectionHeader(crNum, "Compte-rendu analytique");
+
+  const sourceLabels: Record<string, string> = {
+    groq: "Groq — LLaMA-3.3-70B Versatile",
+    anthropic: "Anthropic — Claude Haiku 4.5",
+    openai: "OpenAI — GPT-4o Mini",
+    fallback: "Généré localement (aucune clé API)",
+  };
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  if (source === "fallback") {
-    doc.setTextColor(150);
-    doc.setFontSize(8);
-    doc.text("(compte-rendu généré localement)", margin, y);
-    y += 12;
-    doc.setFontSize(10);
-    doc.setTextColor(0);
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Analyse IA : ${sourceLabels[source] ?? source}`, M, y);
+  y += 14;
+  doc.setTextColor(0, 0, 0);
+
+  // Parse and render structured summary
+  type Part = { type: "h3" | "bullet" | "body"; text: string };
+  const cleanLine = (l: string) => l.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*/g, "").trim();
+
+  const parts: Part[] = summary.split("\n").map((line): Part => {
+    const t = line.trim();
+    if (/^###\s/.test(t)) return { type: "h3", text: cleanLine(t.replace(/^###\s+/, "")) };
+    if (/^[-•]\s/.test(t)) return { type: "bullet", text: cleanLine(t.replace(/^[-•]\s+/, "")) };
+    return { type: "body", text: cleanLine(t) };
+  });
+
+  let prevType: string | null = null;
+  for (const part of parts) {
+    if (!part.text) {
+      if (prevType === "body") y += 5;
+      prevType = "empty";
+      continue;
+    }
+
+    if (part.type === "h3") {
+      ensureSpace(30);
+      y += prevType && prevType !== "empty" ? 8 : 0;
+      doc.setFillColor(239, 246, 255);
+      doc.rect(M, y - 12, CW, 18, "F");
+      doc.setFillColor(37, 99, 235);
+      doc.rect(M, y - 12, 3, 18, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(30, 64, 175);
+      doc.text(part.text, M + 8, y);
+      doc.setTextColor(0, 0, 0);
+      y += 12;
+    } else if (part.type === "bullet") {
+      const wrapped = doc.splitTextToSize(part.text, CW - 18) as string[];
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      for (let li = 0; li < wrapped.length; li++) {
+        ensureSpace(14);
+        if (li === 0) {
+          doc.setFillColor(37, 99, 235);
+          doc.ellipse(M + 6, y - 3, 2, 2, "F");
+        }
+        doc.text(wrapped[li], M + 16, y);
+        y += 13;
+      }
+    } else {
+      const wrapped = doc.splitTextToSize(part.text, CW) as string[];
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59);
+      for (const line of wrapped) {
+        ensureSpace(14);
+        doc.text(line, M, y);
+        y += 13;
+      }
+    }
+    prevType = part.type;
   }
 
-  const lines = doc.splitTextToSize(summary, pageWidth - margin * 2);
-  for (const line of lines) {
-    ensureSpace(14);
-    doc.text(line, margin, y);
-    y += 13;
-  }
-
+  footer();
   doc.save(`${model.name.replace(/\s+/g, "_")}_rapport.pdf`);
 }
 
